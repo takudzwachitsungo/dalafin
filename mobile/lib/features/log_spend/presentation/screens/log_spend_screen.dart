@@ -12,7 +12,7 @@ class LogSpendScreen extends StatefulWidget {
 }
 
 class _LogSpendScreenState extends State<LogSpendScreen> {
-  final _amountController = TextEditingController();
+  String _amountStr = '';
   final _noteController = TextEditingController();
 
   String _selectedCategory = 'Food & Dining';
@@ -52,9 +52,28 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
     }
   }
 
+  void _handleKeyPress(String key) {
+    if (key == '.') {
+      if (_amountStr.contains('.')) return;
+      if (_amountStr.isEmpty) _amountStr = '0';
+    }
+    if (_amountStr.length >= 7) return;
+    setState(() {
+      _amountStr += key;
+    });
+  }
+
+  void _handleDelete() {
+    if (_amountStr.isNotEmpty) {
+      setState(() {
+        _amountStr = _amountStr.substring(0, _amountStr.length - 1);
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final amount = double.tryParse(_amountController.text) ?? 0.0;
+    final amount = double.tryParse(_amountStr) ?? 0.0;
     final feeData = TariffCalculator.calculateFee(amount, _selectedTariff);
     final fee = feeData['fee']!;
     final totalDeducted = feeData['total']!;
@@ -64,73 +83,126 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
     final futureValue5Yr = amount * 1.4025;
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text("Log Expense"),
+        title: const Text("Log Expense", style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // 1. AMOUNT INPUT FIELD
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.glassBorder),
-              ),
-              child: TextField(
-                controller: _amountController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: AppColors.primaryEmerald),
-                decoration: const InputDecoration(
-                  prefixText: "\$ ",
-                  prefixStyle: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: AppColors.primaryEmerald),
-                  border: InputBorder.none,
-                  hintText: "0.00",
-                  hintStyle: TextStyle(color: AppColors.textMuted),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                const Text("\$", style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                Text(
+                  _amountStr.isEmpty ? "0" : _amountStr,
+                  style: TextStyle(
+                    fontSize: 56,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -1.5,
+                    color: _amountStr.isEmpty ? AppColors.textMuted : AppColors.textPrimary,
+                  ),
                 ),
-                onChanged: (val) => setState(() {}),
-              ),
+              ],
             ),
+
+            const SizedBox(height: 12),
+
+            if (amount > 0 && !_showBeforeYouBuy)
+              TextButton.icon(
+                onPressed: () => setState(() => _showBeforeYouBuy = true),
+                icon: const Icon(Icons.calculate_outlined, color: AppColors.infoIndigo, size: 18),
+                label: const Text(
+                  "Show Purchase Analysis",
+                  style: TextStyle(color: AppColors.infoIndigo, fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                style: TextButton.styleFrom(
+                  backgroundColor: AppColors.infoIndigo.withValues(alpha: 0.1),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                ),
+              ),
+
+            if (_showBeforeYouBuy && amount > 0) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.glassBorder),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text("Costs in Labor Hours:", style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                        Text("${hoursWorked.toStringAsFixed(1)} hrs", style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.warningOrange)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text("5-Yr Opportunity Cost:", style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                        Text("\$${futureValue5Yr.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.safeGreen)),
+                      ],
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => setState(() => _showBeforeYouBuy = false),
+                        child: const Text("Hide Analysis", style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                      ),
+                    )
+                  ],
+                ),
+              )
+            ],
 
             const SizedBox(height: 16),
 
-            // 2. TARIFF & FEE BREAKDOWN DISPLAY
             if (amount > 0 && fee > 0)
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
-                  color: AppColors.warningAmber.withValues(alpha: 0.12),
+                  color: AppColors.warningBg,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.warningAmber.withValues(alpha: 0.3)),
+                  border: Border.all(color: AppColors.warningOrange.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.receipt_long, color: AppColors.warningAmber, size: 18),
-                        const SizedBox(width: 8),
-                        Text(
-                          "Tariff Fee: +\$${fee.toStringAsFixed(2)}",
-                          style: const TextStyle(color: AppColors.warningAmber, fontWeight: FontWeight.bold, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      "Total Deducted: \$${totalDeducted.toStringAsFixed(2)}",
-                      style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
-                    ),
+                    Text("Tariff Fee: +\$${fee.toStringAsFixed(2)}", style: const TextStyle(color: AppColors.warningOrange, fontWeight: FontWeight.bold, fontSize: 13)),
+                    Text("Total: \$${totalDeducted.toStringAsFixed(2)}", style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
                   ],
                 ),
               ),
 
             const SizedBox(height: 20),
 
-            // 3. SELECT ACCOUNT & TARIFF
-            const Text("Pay From Account", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+            TextField(
+              controller: _noteController,
+              decoration: InputDecoration(
+                labelText: "What's this for? (optional)",
+                hintText: "e.g., Coffee, Lunch, Groceries",
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                filled: true,
+                fillColor: AppColors.surface,
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text("Pay From Account", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary, fontSize: 13)),
+            ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -139,9 +211,9 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
                 return ChoiceChip(
                   label: Text(acc['name'] as String),
                   selected: isSelected,
-                  selectedColor: AppColors.primaryEmerald,
+                  selectedColor: AppColors.textPrimary,
                   backgroundColor: AppColors.surface,
-                  labelStyle: TextStyle(color: isSelected ? Colors.black : AppColors.textPrimary, fontWeight: FontWeight.bold),
+                  labelStyle: TextStyle(color: isSelected ? Colors.white : AppColors.textPrimary, fontWeight: FontWeight.bold),
                   onSelected: (selected) {
                     if (selected) {
                       setState(() {
@@ -157,8 +229,10 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
 
             const SizedBox(height: 20),
 
-            // 4. CATEGORY SELECTOR
-            const Text("Category", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text("Category", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary, fontSize: 13)),
+            ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -170,7 +244,7 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
                   selected: isSelected,
                   selectedColor: AppColors.infoIndigo,
                   backgroundColor: AppColors.surface,
-                  labelStyle: TextStyle(color: isSelected ? Colors.white : AppColors.textPrimary),
+                  labelStyle: TextStyle(color: isSelected ? Colors.white : AppColors.textPrimary, fontSize: 13),
                   onSelected: (selected) {
                     if (selected) {
                       setState(() => _selectedCategory = cat);
@@ -180,75 +254,16 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
               }).toList(),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
 
-            // 5. BEFORE-YOU-BUY CALCULATOR TOGGLE
-            if (amount > 0) ...[
-              OutlinedButton.icon(
-                onPressed: () => setState(() => _showBeforeYouBuy = !_showBeforeYouBuy),
-                icon: const Icon(Icons.calculate_outlined, color: AppColors.primaryEmerald),
-                label: Text(
-                  _showBeforeYouBuy ? "Hide Purchase Analysis" : "Show Before-You-Buy Analysis",
-                  style: const TextStyle(color: AppColors.primaryEmerald, fontWeight: FontWeight.bold),
-                ),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.primaryEmerald),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
+            _buildReactKeypadGrid(),
 
-              if (_showBeforeYouBuy) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceLight,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.glassBorder),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.timer, color: AppColors.warningAmber, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            "Costs ${hoursWorked.toStringAsFixed(1)} hours of your labor",
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Icon(Icons.trending_up, color: AppColors.primaryEmerald, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            "5-Yr Opportunity Cost: \$${futureValue5Yr.toStringAsFixed(2)}",
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryEmerald),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        "Is this purchase worth ${hoursWorked.toStringAsFixed(1)} hours of your life?",
-                        style: const TextStyle(fontStyle: FontStyle.italic, color: AppColors.textSecondary, fontSize: 13),
-                      )
-                    ],
-                  ),
-                ),
-              ],
-            ],
+            const SizedBox(height: 24),
 
-            const SizedBox(height: 28),
-
-            // 6. SAVE EXPENSE BUTTON
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  if (amount <= 0) return;
+                onPressed: amount <= 0 ? null : () {
                   if (amount >= 50.0 && _selectedCategory != 'Bills & Utilities') {
                     _showEmergencyPauseDialog(context, amount, fee, totalDeducted);
                   } else {
@@ -256,16 +271,57 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
                   }
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryEmerald,
+                  backgroundColor: AppColors.textPrimary,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
-                child: const Text("Save Expense", style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
+                child: const Text("Save Expense", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             )
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildReactKeypadGrid() {
+    final keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'DEL'];
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        childAspectRatio: 2.2,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+      ),
+      itemCount: keys.length,
+      itemBuilder: (ctx, idx) {
+        final k = keys[idx];
+        return InkWell(
+          onTap: () {
+            if (k == 'DEL') {
+              _handleDelete();
+            } else {
+              _handleKeyPress(k);
+            }
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.glassBorder),
+            ),
+            child: Center(
+              child: k == 'DEL'
+                  ? const Icon(Icons.backspace_outlined, size: 20, color: AppColors.textPrimary)
+                  : Text(k, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -278,9 +334,9 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Row(
           children: [
-            Icon(Icons.pause_circle_filled, color: AppColors.dangerRose),
+            Icon(Icons.pause_circle_filled, color: AppColors.dangerRed),
             SizedBox(width: 8),
-            Text("Emergency Pause", style: TextStyle(color: AppColors.dangerRose, fontWeight: FontWeight.bold)),
+            Text("Emergency Pause", style: TextStyle(color: AppColors.dangerRed, fontWeight: FontWeight.bold)),
           ],
         ),
         content: Column(
@@ -316,7 +372,7 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
                 _saveTransaction(fee, totalDeducted, reasonController.text);
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.dangerRose),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.dangerRed),
             child: const Text("Override & Save", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
@@ -325,7 +381,7 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
   }
 
   Future<void> _saveTransaction(double fee, double totalDeducted, String? emergencyReason) async {
-    final amount = double.tryParse(_amountController.text) ?? 0.0;
+    final amount = double.tryParse(_amountStr) ?? 0.0;
     final txId = const Uuid().v4();
     final nowIso = DateTime.now().toIso8601String();
 
@@ -348,7 +404,7 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("Logged \$${amount.toStringAsFixed(2)} from $_selectedAccountName! 🎉"),
-          backgroundColor: AppColors.primaryEmerald,
+          backgroundColor: AppColors.safeGreen,
         ),
       );
       Navigator.pop(context);
