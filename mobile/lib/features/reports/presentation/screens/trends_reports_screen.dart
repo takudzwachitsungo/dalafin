@@ -1,20 +1,31 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 
-class TrendsReportsScreen extends StatelessWidget {
+class TrendsReportsScreen extends StatefulWidget {
   const TrendsReportsScreen({super.key});
+
+  @override
+  State<TrendsReportsScreen> createState() => _TrendsReportsScreenState();
+}
+
+class _TrendsReportsScreenState extends State<TrendsReportsScreen> {
+  String _selectedPeriod = 'weekly';
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text("Trends & Reports"),
+        title: const Text("Weekly Report", style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Text("Last 7 days", style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+            const SizedBox(height: 16),
+
             // 1. WEEKLY WINS SUMMARY CARD
             Container(
               padding: const EdgeInsets.all(20),
@@ -52,7 +63,7 @@ class TrendsReportsScreen extends StatelessWidget {
             const SizedBox(height: 24),
 
             // 2. 30-DAY SPENDING HEAT MAP
-            const Text("30-Day Spending Heat Map", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+            const Text("30-Day Spending Pattern", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(16),
@@ -73,11 +84,11 @@ class TrendsReportsScreen extends StatelessWidget {
                     ),
                     itemCount: 30,
                     itemBuilder: (ctx, index) {
-                      Color tileColor = AppColors.primaryEmerald.withValues(alpha: 0.3);
+                      Color tileColor = AppColors.safeGreen.withValues(alpha: 0.3);
                       if (index == 4 || index == 12 || index == 21) {
-                        tileColor = AppColors.dangerRose.withValues(alpha: 0.8);
+                        tileColor = AppColors.dangerRed.withValues(alpha: 0.8);
                       } else if (index == 8 || index == 19) {
-                        tileColor = AppColors.warningAmber.withValues(alpha: 0.7);
+                        tileColor = AppColors.warningOrange.withValues(alpha: 0.7);
                       }
 
                       return Container(
@@ -97,9 +108,9 @@ class TrendsReportsScreen extends StatelessWidget {
                   const Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _LegendItem(color: AppColors.primaryEmerald, label: "Under Cap"),
-                      _LegendItem(color: AppColors.warningAmber, label: "80-100% Cap"),
-                      _LegendItem(color: AppColors.dangerRose, label: "Over Cap"),
+                      _LegendItem(color: AppColors.safeGreen, label: "Under Cap"),
+                      _LegendItem(color: AppColors.warningOrange, label: "80-100% Cap"),
+                      _LegendItem(color: AppColors.dangerRed, label: "Over Cap"),
                     ],
                   )
                 ],
@@ -111,9 +122,92 @@ class TrendsReportsScreen extends StatelessWidget {
             // 3. CATEGORY SPENDING LIMITS
             const Text("Category Limits", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
             const SizedBox(height: 12),
-            _buildCategoryLimitItem("Food & Dining", 120.00, 180.00, AppColors.primaryEmerald),
-            _buildCategoryLimitItem("Entertainment", 45.00, 50.00, AppColors.warningAmber),
-            _buildCategoryLimitItem("Shopping", 85.00, 80.00, AppColors.dangerRose),
+            _buildCategoryLimitItem("Food & Dining", 120.00, 180.00, AppColors.safeGreen),
+            _buildCategoryLimitItem("Entertainment", 45.00, 50.00, AppColors.warningOrange),
+            _buildCategoryLimitItem("Shopping", 85.00, 80.00, AppColors.dangerRed),
+
+            const SizedBox(height: 24),
+
+            // 4. EXCEL REPORT EXPORTER (MATCHING REACT UI)
+            const Text("Export Reports", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.safeBg,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.safeGreen.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.file_download_outlined, color: AppColors.safeGreen, size: 24),
+                      SizedBox(width: 10),
+                      Text("Download Excel Report", style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Text("Get a formatted spreadsheet with income, expenses, and insights", style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                  const SizedBox(height: 16),
+                  const Text("Report Period", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 13)),
+                  const SizedBox(height: 8),
+                  GridView.count(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: 2,
+                    childAspectRatio: 3.2,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    children: ['weekly', 'monthly', 'quarterly', 'yearly'].map((period) {
+                      final isSelected = _selectedPeriod == period;
+                      return InkWell(
+                        onTap: () => setState(() => _selectedPeriod = period),
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppColors.safeGreen : AppColors.surface,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: isSelected ? AppColors.safeGreen : AppColors.glassBorder),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            period.toUpperCase(),
+                            style: TextStyle(
+                              color: isSelected ? Colors.white : AppColors.textPrimary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text("Exporting ${_selectedPeriod.toUpperCase()} Excel Report... 📊"),
+                            backgroundColor: AppColors.safeGreen,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.download, color: Colors.white),
+                      label: Text("Download ${_selectedPeriod.toUpperCase()} Report", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.safeGreen,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  )
+                ],
+              ),
+            )
           ],
         ),
       ),
