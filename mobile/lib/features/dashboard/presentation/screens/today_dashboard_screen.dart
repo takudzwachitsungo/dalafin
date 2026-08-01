@@ -3,6 +3,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/storage/app_database.dart';
 import '../../../../core/storage/preferences_helper.dart';
 import '../../../../core/utils/spend_velocity_tracker.dart';
+import '../../../reflections/presentation/screens/nightly_reflection_dialog.dart';
 
 class TodayDashboardScreen extends StatefulWidget {
   final VoidCallback onLogSpendPressed;
@@ -69,7 +70,6 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen> {
     final remainingToday = (availableToday - todaySpent).clamp(0.0, availableToday);
     final progress = availableToday > 0 ? (todaySpent / availableToday).clamp(0.0, 1.0) : 0.0;
 
-    // Evaluate Velocity Pacing
     final velocityEval = SpendVelocityTracker.evaluateVelocity(
       todaySpent: todaySpent,
       availableDailyCap: availableToday,
@@ -123,23 +123,19 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. VELOCITY PACING WARNING BANNER (IF TRIGGERED)
               if (warningMessage != null) ...[
                 _buildVelocityWarningBanner(warningMessage),
                 const SizedBox(height: 16),
               ],
 
-              // 2. TODAY SPEND PROGRESS CARD
               _buildSpendCard(availableToday, remainingToday, progress),
 
               const SizedBox(height: 20),
 
-              // 3. ROLLOVER BONUS BADGE
               if (rolloverBudget > 0) _buildRolloverBadge(),
 
               const SizedBox(height: 24),
 
-              // 4. POCKET WALLETS SECTION
               const Text(
                 "Pocket Wallets",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
@@ -149,8 +145,7 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen> {
 
               const SizedBox(height: 24),
 
-              // 5. QUICK ACTION BANNER
-              _buildQuickActionButton(),
+              _buildActionButtons(),
             ],
           ),
         ),
@@ -352,25 +347,51 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen> {
     );
   }
 
-  Widget _buildQuickActionButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: () async {
-          widget.onLogSpendPressed();
-          await _loadOfflineData();
-        },
-        icon: const Icon(Icons.add, color: Colors.black),
-        label: const Text(
-          "Log Spend (Instant 2-Tap)",
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16),
+  Widget _buildActionButtons() {
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () async {
+              widget.onLogSpendPressed();
+              await _loadOfflineData();
+            },
+            icon: const Icon(Icons.add, color: Colors.black),
+            label: const Text(
+              "Log Spend (Instant 2-Tap)",
+              style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryEmerald,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            ),
+          ),
         ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primaryEmerald,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (ctx) => const NightlyReflectionDialog(),
+              ).then((_) => _loadOfflineData());
+            },
+            icon: const Icon(Icons.nightlight_round, color: AppColors.infoIndigo),
+            label: const Text(
+              "Nightly Reflection Journal 🌙",
+              style: TextStyle(color: AppColors.infoIndigo, fontWeight: FontWeight.bold, fontSize: 15),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: AppColors.infoIndigo),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 }
