@@ -20,6 +20,7 @@ from routes import (
     auth, 
     accounts,
     transactions, 
+    sync,
     reflections, 
     goals, 
     category_limits, 
@@ -45,8 +46,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Dalafin Finance API",
-    description="Behavior-driven personal finance application API with Tariff Engine",
-    version="1.1.0",
+    description="Behavior-driven personal finance application API with Tariff Engine & Delta Sync",
+    version="1.2.0",
     lifespan=lifespan
 )
 
@@ -63,6 +64,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(accounts.router)
 app.include_router(transactions.router)
+app.include_router(sync.router)
 app.include_router(reflections.router)
 app.include_router(goals.router)
 app.include_router(category_limits.router)
@@ -76,7 +78,7 @@ app.include_router(insights.router)
 def read_root():
     return {
         "message": "Dalafin API Online",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "status": "healthy"
     }
 
