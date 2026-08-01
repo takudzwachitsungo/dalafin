@@ -9,8 +9,45 @@ from models.transaction import Transaction
 from models.budget_rollover import BudgetRollover
 from models.streak import UserStreak
 from utils.deps import get_current_user
+from services.adaptive_engine import adaptive_engine
 
 router = APIRouter(prefix="/api/budget", tags=["budget"])
+
+@router.get("/velocity")
+def get_spend_velocity(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Evaluates real-time spend velocity pacing vs time-of-day.
+    Returns pacing spike warnings and adaptive day-of-week allowances.
+    """
+    today = date.today()
+    base_cap = current_user.daily_limit
+    
+    # Adaptive Day-of-Week Cap
+    weekday = datetime.utcnow().weekday()
+    adaptive_cap = adaptive_engine.get_adaptive_daily_cap(base_cap, weekday)
+
+    # Today's total spent
+    today_spent = db.query(func.sum(Transaction.amount)).filter(
+        and_(
+            Transaction.user_id == current_user.id,
+            Transaction.date == today
+        )
+    ).scalar() or 0.0
+
+    eval_result = adaptive_engine.evaluate_velocity(today_spent, adaptive_cap)
+
+    return {
+        "base_daily_cap": base_cap,
+        "adaptive_daily_cap": adaptive_cap,
+        "today_spent": today_spent,
+        "weekday": weekday,
+        "is_pacing_spike": eval_result["is_pacing_spike"],
+        "spent_ratio": eval_result["spent_ratio"],
+        "warning_message": eval_result["warning_message"]
+    }
 
 @router.get("/today")
 def get_today_budget(
@@ -18,17 +55,14 @@ def get_today_budget(
     current_user: User = Depends(get_current_user)
 ):
     """Get today's available budget (daily limit + rollover)"""
-    # Get user's daily limit
     daily_limit = current_user.daily_limit
     
-    # Get rollover budget from streak
     streak = db.query(UserStreak).filter(
         UserStreak.user_id == current_user.id
     ).first()
     
     rollover_budget = streak.rollover_budget if streak else 0.0
     
-    # Get today's spending
     today = date.today()
     today_spent = db.query(func.sum(Transaction.amount)).filter(
         and_(
@@ -59,10 +93,8 @@ def get_budget_history(
     end_date = date.today()
     start_date = end_date - timedelta(days=days - 1)
     
-    # Get daily limit
     daily_limit = current_user.daily_limit
     
-    # Get all transactions in range
     transactions = db.query(
         Transaction.date,
         func.sum(Transaction.amount).label("spent")
@@ -74,10 +106,8 @@ def get_budget_history(
         )
     ).group_by(Transaction.date).all()
     
-    # Create dict for easy lookup
     spending_by_date = {t.date: t.spent for t in transactions}
     
-    # Build array for each day
     history = []
     for i in range(days):
         day = start_date + timedelta(days=i)
@@ -121,13 +151,9 @@ def calculate_and_apply_rollover(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Calculate yesterday's unused budget and apply to rollover
-    (Max 3 days of rollover allowed)
-    """
+    """Calculate yesterday's unused budget and apply to rollover (Max 3 days of rollover allowed)"""
     yesterday = date.today() - timedelta(days=1)
     
-    # Get yesterday's spending
     yesterday_spent = db.query(func.sum(Transaction.amount)).filter(
         and_(
             Transaction.user_id == current_user.id,
@@ -141,7 +167,6 @@ def calculate_and_apply_rollover(
     if unused <= 0:
         return {"message": "No unused budget to rollover", "unused": 0, "rollover_applied": 0}
     
-    # Get or create streak
     streak = db.query(UserStreak).filter(
         UserStreak.user_id == current_user.id
     ).first()
@@ -156,14 +181,12 @@ def calculate_and_apply_rollover(
         )
         db.add(streak)
     
-    # Calculate new rollover (max 3 days)
     max_rollover = daily_limit * 3
     new_rollover = min(streak.rollover_budget + unused, max_rollover)
     rollover_applied = new_rollover - streak.rollover_budget
     
     streak.rollover_budget = new_rollover
     
-    # Record rollover history
     rollover_record = BudgetRollover(
         user_id=current_user.id,
         date=yesterday,
@@ -191,7 +214,6 @@ def get_weekly_savings(
     """Calculate savings for this week vs last week"""
     today = date.today()
     
-    # This week (last 7 days)
     week_start = today - timedelta(days=6)
     this_week_spent = db.query(func.sum(Transaction.amount)).filter(
         and_(
@@ -201,7 +223,6 @@ def get_weekly_savings(
         )
     ).scalar() or 0.0
     
-    # Last week (days 7-13 ago)
     last_week_end = week_start - timedelta(days=1)
     last_week_start = last_week_end - timedelta(days=6)
     last_week_spent = db.query(func.sum(Transaction.amount)).filter(
