@@ -8,7 +8,7 @@ class MinimaxService:
     def __init__(self):
         self.api_key = settings.MINIMAX_API_KEY
         self.base_url = "https://api.minimax.chat/v1"
-        self.model = "abab5.5-chat"  # Default model
+        self.model = "abab5.5-chat"
         
     async def _make_request(
         self,
@@ -18,7 +18,6 @@ class MinimaxService:
         max_tokens: int = 500
     ) -> Dict[str, Any]:
         """Make request to Minimax API"""
-        
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -42,15 +41,43 @@ class MinimaxService:
             response.raise_for_status()
             return response.json()
     
+    async def chat_with_coach(
+        self,
+        user_message: str,
+        user_context: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Conversational Financial Discipline Coach powered by Minimax AI.
+        Provides empathetic, localized financial advice tailored to daily caps, EcoCash tariffs, and impulse control.
+        """
+        system_prompt = """You are Dalafin AI, an empathetic, highly skilled financial discipline companion and wealth coach for everyday people in developing markets.
+        Your goal is to build long-term financial discipline, curb impulse spending, and help users navigate multi-currency/pocket realities (USD cash, EcoCash, bank cards with tariffs).
+        Be encouraging, practical, brief (under 120 words), and clear. Do not use complex wall-street financial jargon."""
+        
+        ctx_str = ""
+        if user_context:
+            ctx_str = f"\nUser Context: Daily Cap: ${user_context.get('daily_limit', 15):.2f}, Spent Today: ${user_context.get('spent_today', 0):.2f}, Active Streak: {user_context.get('streak', 1)} days."
+            
+        full_prompt = f"{user_message}{ctx_str}"
+        
+        try:
+            result = await self._make_request(
+                prompt=full_prompt,
+                system_prompt=system_prompt,
+                temperature=0.7,
+                max_tokens=300
+            )
+            reply = result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            return reply or "Keep building your financial discipline step by step!"
+        except Exception as e:
+            print(f"Error in chat_with_coach: {e}")
+            return "Remember: Every dollar saved today protects tomorrow's freedom!"
+
     async def categorize_transaction(
         self,
         description: str,
         amount: float
     ) -> str:
-        """
-        Auto-categorize transaction from description
-        Returns: category name
-        """
         system_prompt = """You are a financial categorization assistant. 
         Categorize transactions into one of these categories:
         - Food & Dining
@@ -73,10 +100,8 @@ class MinimaxService:
                 max_tokens=20
             )
             
-            # Extract category from response
             category = result.get("choices", [{}])[0].get("message", {}).get("content", "Other").strip()
             
-            # Validate category
             valid_categories = [
                 "Food & Dining", "Entertainment", "Shopping", 
                 "Transport", "Bills & Utilities", "Health & Fitness", "Other"
@@ -94,10 +119,6 @@ class MinimaxService:
         self,
         spending_data: Dict[str, Any]
     ) -> str:
-        """
-        Analyze spending patterns and provide insights
-        Returns: insight text
-        """
         system_prompt = """You are a personal finance advisor. 
         Analyze spending patterns and provide brief, actionable insights.
         Keep your response under 100 words. Focus on specific patterns and suggestions."""
@@ -130,10 +151,6 @@ class MinimaxService:
         reflection_text: str,
         regret_purchase: bool
     ) -> Dict[str, Any]:
-        """
-        Analyze daily reflection for emotional triggers
-        Returns: {triggers: [...], suggestions: [...]}
-        """
         system_prompt = """You are a behavioral finance psychologist.
         Analyze reflections to identify emotional triggers and spending patterns.
         Return insights in this format:
@@ -153,7 +170,6 @@ class MinimaxService:
             
             content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
             
-            # Parse response (simple parsing, can be improved)
             triggers = []
             suggestions = []
             
@@ -189,10 +205,6 @@ class MinimaxService:
         item_name: str,
         price: float
     ) -> str:
-        """
-        Generate a thoughtful question for impulse check
-        Returns: question text
-        """
         system_prompt = """You are a mindful spending coach.
         Generate ONE brief, thought-provoking question to help someone pause before an impulse purchase.
         The question should make them consider if they really need the item.
@@ -214,5 +226,4 @@ class MinimaxService:
             print(f"Error generating question: {e}")
             return "Do you really need this right now?"
 
-# Singleton instance
 minimax_service = MinimaxService()

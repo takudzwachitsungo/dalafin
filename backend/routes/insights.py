@@ -3,10 +3,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, func
 from datetime import date, timedelta
 from pydantic import BaseModel
+from typing import Optional
 from database import get_db
 from models.user import User
 from models.transaction import Transaction
 from models.reflection import Reflection
+from models.streak import UserStreak
 from services.llm import minimax_service
 from utils.deps import get_current_user
 
@@ -23,6 +25,43 @@ class ReflectionAnalysisRequest(BaseModel):
 class ImpulseQuestionRequest(BaseModel):
     item_name: str
     price: float
+
+class ChatCoachRequest(BaseModel):
+    message: str
+
+@router.post("/chat")
+async def chat_with_coach(
+    request: ChatCoachRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Conversational AI Financial Discipline Coach powered by Minimax AI"""
+    today = date.today()
+    today_spent = db.query(func.sum(Transaction.amount)).filter(
+        and_(
+            Transaction.user_id == current_user.id,
+            Transaction.date == today
+        )
+    ).scalar() or 0.0
+
+    streak_obj = db.query(UserStreak).filter(
+        UserStreak.user_id == current_user.id
+    ).first()
+    
+    current_streak = streak_obj.current_streak if streak_obj else 1
+
+    user_context = {
+        "daily_limit": current_user.daily_limit,
+        "spent_today": today_spent,
+        "streak": current_streak
+    }
+
+    reply = await minimax_service.chat_with_coach(
+        user_message=request.message,
+        user_context=user_context
+    )
+    
+    return {"reply": reply}
 
 @router.post("/categorize")
 async def categorize_transaction(
@@ -45,7 +84,6 @@ async def analyze_spending(
     today = date.today()
     month_start = today.replace(day=1)
     
-    # Gather spending data
     transactions = db.query(Transaction).filter(
         and_(
             Transaction.user_id == current_user.id,
@@ -55,31 +93,25 @@ async def analyze_spending(
     
     total_spent = sum(t.amount for t in transactions)
     
-    # Category breakdown
     category_spending = {}
     for t in transactions:
         category_spending[t.category] = category_spending.get(t.category, 0) + t.amount
     
     top_category = max(category_spending.items(), key=lambda x: x[1]) if category_spending else ("Other", 0)
     
-    # Impulse data
     impulse_transactions = [t for t in transactions if t.is_impulse]
     impulse_count = len(impulse_transactions)
     impulse_total = sum(t.amount for t in impulse_transactions)
     
-    # Streak
-    from models.streak import UserStreak
     streak = db.query(UserStreak).filter(
         UserStreak.user_id == current_user.id
     ).first()
     
     current_streak = streak.current_streak if streak else 0
     
-    # Budget
     days_in_month = (today - month_start).days + 1
     monthly_budget = current_user.daily_limit * days_in_month
     
-    # Prepare data for LLM
     spending_data = {
         "total_spent": total_spent,
         "budget": monthly_budget,
@@ -90,7 +122,6 @@ async def analyze_spending(
         "streak": current_streak
     }
     
-    # Get AI insights
     insights = await minimax_service.analyze_spending_pattern(spending_data)
     
     return {
