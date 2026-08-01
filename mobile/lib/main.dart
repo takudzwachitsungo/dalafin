@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'core/constants/app_theme.dart';
+import 'core/notifications/notification_service.dart';
 import 'features/dashboard/presentation/screens/today_dashboard_screen.dart';
 import 'features/log_spend/presentation/screens/log_spend_screen.dart';
 import 'features/wishlist/presentation/screens/wishlist_screen.dart';
 import 'features/reports/presentation/screens/trends_reports_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService.instance.initialize();
   runApp(const DalafinApp());
 }
 
