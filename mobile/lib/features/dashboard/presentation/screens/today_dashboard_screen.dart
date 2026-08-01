@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/storage/app_database.dart';
 import '../../../../core/storage/preferences_helper.dart';
+import '../../../../core/utils/spend_velocity_tracker.dart';
 
 class TodayDashboardScreen extends StatefulWidget {
   final VoidCallback onLogSpendPressed;
@@ -36,7 +37,6 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen> {
     final dbAccounts = await AppDatabase.instance.getAccounts();
     final transactions = await AppDatabase.instance.getTransactions();
 
-    // Calculate today's spent
     final todayStr = DateTime.now().toIso8601String().split('T')[0];
     double spentSum = 0.0;
 
@@ -68,6 +68,13 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen> {
     final availableToday = dailyLimit + rolloverBudget;
     final remainingToday = (availableToday - todaySpent).clamp(0.0, availableToday);
     final progress = availableToday > 0 ? (todaySpent / availableToday).clamp(0.0, 1.0) : 0.0;
+
+    // Evaluate Velocity Pacing
+    final velocityEval = SpendVelocityTracker.evaluateVelocity(
+      todaySpent: todaySpent,
+      availableDailyCap: availableToday,
+    );
+    final String? warningMessage = velocityEval['warningMessage'] as String?;
 
     return Scaffold(
       appBar: AppBar(
@@ -116,17 +123,23 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. TODAY SPEND PROGRESS CARD
+              // 1. VELOCITY PACING WARNING BANNER (IF TRIGGERED)
+              if (warningMessage != null) ...[
+                _buildVelocityWarningBanner(warningMessage),
+                const SizedBox(height: 16),
+              ],
+
+              // 2. TODAY SPEND PROGRESS CARD
               _buildSpendCard(availableToday, remainingToday, progress),
 
               const SizedBox(height: 20),
 
-              // 2. ROLLOVER BONUS BADGE
+              // 3. ROLLOVER BONUS BADGE
               if (rolloverBudget > 0) _buildRolloverBadge(),
 
               const SizedBox(height: 24),
 
-              // 3. POCKET WALLETS SECTION
+              // 4. POCKET WALLETS SECTION
               const Text(
                 "Pocket Wallets",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
@@ -136,11 +149,34 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen> {
 
               const SizedBox(height: 24),
 
-              // 4. QUICK ACTION BANNER
+              // 5. QUICK ACTION BANNER
               _buildQuickActionButton(),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildVelocityWarningBanner(String message) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.dangerRose.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.dangerRose.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.speed, color: AppColors.dangerRose, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: AppColors.dangerRose, fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
+        ],
       ),
     );
   }
