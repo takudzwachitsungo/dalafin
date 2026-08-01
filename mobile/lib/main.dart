@@ -20,7 +20,7 @@ class DalafinApp extends StatelessWidget {
     return MaterialApp(
       title: 'Dalafin',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
+      theme: AppTheme.lightTheme,
       home: const MainNavigationWrapper(),
     );
   }
@@ -70,12 +70,12 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
             label: "Log Spend",
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.ac_unit),
+            icon: Icon(Icons.favorite_border),
             label: "Wishlist",
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.bar_chart),
-            label: "Trends",
+            label: "Reports",
           ),
         ],
       ),

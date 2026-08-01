@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'app_colors.dart';
 
 class AppTheme {
-  static ThemeData get darkTheme {
+  static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
+      brightness: Brightness.light,
       scaffoldBackgroundColor: AppColors.background,
-      colorScheme: const ColorScheme.dark(
-        primary: AppColors.primaryEmerald,
-        secondary: AppColors.infoIndigo,
-        error: AppColors.dangerRose,
+      colorScheme: const ColorScheme.light(
+        primary: AppColors.textPrimary,
+        secondary: AppColors.primaryEmerald,
+        error: AppColors.dangerRed,
         surface: AppColors.surface,
         onSurface: AppColors.textPrimary,
       ),
@@ -26,6 +26,7 @@ class AppTheme {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
+        iconTheme: IconThemeData(color: AppColors.textPrimary),
         titleTextStyle: TextStyle(
           color: AppColors.textPrimary,
           fontSize: 22,
@@ -34,11 +35,13 @@ class AppTheme {
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: AppColors.surface,
-        selectedItemColor: AppColors.primaryEmerald,
-        unselectedItemColor: AppColors.textMuted,
+        selectedItemColor: AppColors.textPrimary,
+        unselectedItemColor: AppColors.textSecondary,
         type: BottomNavigationBarType.fixed,
-        elevation: 10,
+        elevation: 8,
       ),
     );
   }
+
+  static ThemeData get darkTheme => lightTheme;
 }
