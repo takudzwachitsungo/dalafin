@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/tariff_calculator.dart';
+import '../../../../core/storage/app_database.dart';
 
 class LogSpendScreen extends StatefulWidget {
   const LogSpendScreen({super.key});
@@ -11,13 +13,16 @@ class LogSpendScreen extends StatefulWidget {
 
 class _LogSpendScreenState extends State<LogSpendScreen> {
   final _amountController = TextEditingController();
+  final _noteController = TextEditingController();
 
   String _selectedCategory = 'Food & Dining';
-  String _selectedAccount = 'EcoCash USD';
-  String _selectedTariff = 'ecocash_usd';
+  String? _selectedAccountId;
+  String _selectedAccountName = 'USD Cash';
+  String _selectedTariff = 'none';
 
   bool _showBeforeYouBuy = false;
-  final double _monthlyIncome = 600.00; // Demo income for work-hour calculation
+  final double _monthlyIncome = 600.00;
+  List<Map<String, dynamic>> _accounts = [];
 
   final List<String> _categories = [
     'Food & Dining',
@@ -29,11 +34,23 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
     'Other'
   ];
 
-  final List<Map<String, String>> _accounts = [
-    {'name': 'USD Cash', 'tariff': 'none'},
-    {'name': 'EcoCash USD', 'tariff': 'ecocash_usd'},
-    {'name': 'CBZ Bank Card', 'tariff': 'imtt_2percent'},
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadAccounts();
+  }
+
+  Future<void> _loadAccounts() async {
+    final accs = await AppDatabase.instance.getAccounts();
+    if (accs.isNotEmpty) {
+      setState(() {
+        _accounts = accs;
+        _selectedAccountId = accs.first['id'] as String;
+        _selectedAccountName = accs.first['name'] as String;
+        _selectedTariff = accs.first['fee_tariff_type'] as String;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,10 +59,9 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
     final fee = feeData['fee']!;
     final totalDeducted = feeData['total']!;
 
-    // Hourly rate = Income / 160 hours
     final hourlyRate = _monthlyIncome / 160.0;
     final hoursWorked = amount > 0 ? (amount / hourlyRate) : 0.0;
-    final futureValue5Yr = amount * 1.4025; // 7% compounding 5 yrs (~40.25% growth)
+    final futureValue5Yr = amount * 1.4025;
 
     return Scaffold(
       appBar: AppBar(
@@ -119,9 +135,9 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
             Wrap(
               spacing: 8,
               children: _accounts.map((acc) {
-                final isSelected = _selectedAccount == acc['name'];
+                final isSelected = _selectedAccountId == acc['id'];
                 return ChoiceChip(
-                  label: Text(acc['name']!),
+                  label: Text(acc['name'] as String),
                   selected: isSelected,
                   selectedColor: AppColors.primaryEmerald,
                   backgroundColor: AppColors.surface,
@@ -129,8 +145,9 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
                   onSelected: (selected) {
                     if (selected) {
                       setState(() {
-                        _selectedAccount = acc['name']!;
-                        _selectedTariff = acc['tariff']!;
+                        _selectedAccountId = acc['id'] as String;
+                        _selectedAccountName = acc['name'] as String;
+                        _selectedTariff = acc['fee_tariff_type'] as String;
                       });
                     }
                   },
@@ -165,7 +182,7 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
 
             const SizedBox(height: 20),
 
-            // 5. BEFORE-YOU-BUY CALCULATOR TOGGLE & PANEL
+            // 5. BEFORE-YOU-BUY CALCULATOR TOGGLE
             if (amount > 0) ...[
               OutlinedButton.icon(
                 onPressed: () => setState(() => _showBeforeYouBuy = !_showBeforeYouBuy),
@@ -231,10 +248,11 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () {
+                  if (amount <= 0) return;
                   if (amount >= 50.0 && _selectedCategory != 'Bills & Utilities') {
-                    _showEmergencyPauseDialog(context, amount);
+                    _showEmergencyPauseDialog(context, amount, fee, totalDeducted);
                   } else {
-                    _saveTransaction();
+                    _saveTransaction(fee, totalDeducted, null);
                   }
                 },
                 style: ElevatedButton.styleFrom(
@@ -251,7 +269,7 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
     );
   }
 
-  void _showEmergencyPauseDialog(BuildContext context, double amount) {
+  void _showEmergencyPauseDialog(BuildContext context, double amount, double fee, double totalDeducted) {
     final reasonController = TextEditingController();
     showDialog(
       context: context,
@@ -270,7 +288,7 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "This purchase is \$${amount.toStringAsFixed(2)}. To prevent impulse buys, please write a brief justification (min 20 chars).",
+              "This purchase is \$${amount.toStringAsFixed(2)}. To prevent impulse buys, please write a brief justification (min 10 chars).",
               style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
             ),
             const SizedBox(height: 12),
@@ -295,7 +313,7 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
             onPressed: () {
               if (reasonController.text.length >= 10) {
                 Navigator.pop(ctx);
-                _saveTransaction();
+                _saveTransaction(fee, totalDeducted, reasonController.text);
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.dangerRose),
@@ -306,10 +324,34 @@ class _LogSpendScreenState extends State<LogSpendScreen> {
     );
   }
 
-  void _saveTransaction() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Expense logged successfully! 🎉"), backgroundColor: AppColors.primaryEmerald),
-    );
-    Navigator.pop(context);
+  Future<void> _saveTransaction(double fee, double totalDeducted, String? emergencyReason) async {
+    final amount = double.tryParse(_amountController.text) ?? 0.0;
+    final txId = const Uuid().v4();
+    final nowIso = DateTime.now().toIso8601String();
+
+    await AppDatabase.instance.insertTransaction({
+      'id': txId,
+      'account_id': _selectedAccountId,
+      'amount': amount,
+      'fee_amount': fee,
+      'total_deducted': totalDeducted,
+      'category': _selectedCategory,
+      'date': nowIso,
+      'is_impulse': emergencyReason != null ? 1 : 0,
+      'is_pacing_flag': 0,
+      'note': _noteController.text.isNotEmpty ? _noteController.text : null,
+      'emergency_reason': emergencyReason,
+      'is_synced': 0,
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Logged \$${amount.toStringAsFixed(2)} from $_selectedAccountName! 🎉"),
+          backgroundColor: AppColors.primaryEmerald,
+        ),
+      );
+      Navigator.pop(context);
+    }
   }
 }

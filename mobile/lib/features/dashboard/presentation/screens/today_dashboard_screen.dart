@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/storage/app_database.dart';
+import '../../../../core/storage/preferences_helper.dart';
 
 class TodayDashboardScreen extends StatefulWidget {
   final VoidCallback onLogSpendPressed;
@@ -11,23 +13,61 @@ class TodayDashboardScreen extends StatefulWidget {
 }
 
 class _TodayDashboardScreenState extends State<TodayDashboardScreen> {
-  // Demo State
   double dailyLimit = 15.00;
-  double rolloverBudget = 8.50;
-  double todaySpent = 6.20;
-  int streakDays = 7;
+  double rolloverBudget = 0.00;
+  double todaySpent = 0.00;
+  int streakDays = 1;
+  bool isLoading = true;
 
-  List<Map<String, dynamic>> pockets = [
-    {'name': 'USD Cash', 'balance': 45.00, 'icon': Icons.payments, 'color': AppColors.primaryEmerald},
-    {'name': 'EcoCash USD', 'balance': 28.50, 'icon': Icons.phone_android, 'color': AppColors.warningAmber},
-    {'name': 'CBZ Bank', 'balance': 120.00, 'icon': Icons.account_balance, 'color': AppColors.infoIndigo},
-  ];
+  List<Map<String, dynamic>> pockets = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOfflineData();
+  }
+
+  Future<void> _loadOfflineData() async {
+    await PreferencesHelper.initDefaults();
+    final limit = await PreferencesHelper.getDailyLimit();
+    final rollover = await PreferencesHelper.getRolloverBudget();
+    final streak = await PreferencesHelper.getStreakDays();
+
+    final dbAccounts = await AppDatabase.instance.getAccounts();
+    final transactions = await AppDatabase.instance.getTransactions();
+
+    // Calculate today's spent
+    final todayStr = DateTime.now().toIso8601String().split('T')[0];
+    double spentSum = 0.0;
+
+    for (var tx in transactions) {
+      final dateStr = (tx['date'] as String).split('T')[0];
+      if (dateStr == todayStr) {
+        spentSum += (tx['amount'] as num).toDouble();
+      }
+    }
+
+    setState(() {
+      dailyLimit = limit;
+      rolloverBudget = rollover;
+      streakDays = streak;
+      todaySpent = spentSum;
+      pockets = dbAccounts;
+      isLoading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator(color: AppColors.primaryEmerald)),
+      );
+    }
+
     final availableToday = dailyLimit + rolloverBudget;
     final remainingToday = (availableToday - todaySpent).clamp(0.0, availableToday);
-    final progress = (todaySpent / availableToday).clamp(0.0, 1.0);
+    final progress = availableToday > 0 ? (todaySpent / availableToday).clamp(0.0, 1.0) : 0.0;
 
     return Scaffold(
       appBar: AppBar(
@@ -67,34 +107,39 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen> {
           )
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. TODAY SPEND PROGRESS CARD
-            _buildSpendCard(availableToday, remainingToday, progress),
+      body: RefreshIndicator(
+        onRefresh: _loadOfflineData,
+        color: AppColors.primaryEmerald,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. TODAY SPEND PROGRESS CARD
+              _buildSpendCard(availableToday, remainingToday, progress),
 
-            const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-            // 2. ROLLOVER BONUS BADGE
-            if (rolloverBudget > 0) _buildRolloverBadge(),
+              // 2. ROLLOVER BONUS BADGE
+              if (rolloverBudget > 0) _buildRolloverBadge(),
 
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-            // 3. POCKET WALLETS SECTION
-            const Text(
-              "Pocket Wallets",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-            ),
-            const SizedBox(height: 12),
-            _buildPocketWalletsGrid(),
+              // 3. POCKET WALLETS SECTION
+              const Text(
+                "Pocket Wallets",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+              ),
+              const SizedBox(height: 12),
+              _buildPocketWalletsGrid(),
 
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-            // 4. QUICK ACTION BANNER
-            _buildQuickActionButton(),
-          ],
+              // 4. QUICK ACTION BANNER
+              _buildQuickActionButton(),
+            ],
+          ),
         ),
       ),
     );
@@ -145,7 +190,6 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen> {
             ],
           ),
           const SizedBox(height: 20),
-          // Progress Bar
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: LinearProgressIndicator(
@@ -215,8 +259,27 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen> {
   }
 
   Widget _buildPocketWalletsGrid() {
+    if (pockets.isEmpty) {
+      return const Text("No wallets created", style: TextStyle(color: AppColors.textMuted));
+    }
+
     return Column(
       children: pockets.map((pocket) {
+        final name = pocket['name'] as String;
+        final balance = (pocket['current_balance'] as num).toDouble();
+        final type = pocket['account_type'] as String;
+
+        IconData icon = Icons.payments;
+        Color color = AppColors.primaryEmerald;
+
+        if (type == 'mobile_money') {
+          icon = Icons.phone_android;
+          color = AppColors.warningAmber;
+        } else if (type == 'bank') {
+          icon = Icons.account_balance;
+          color = AppColors.infoIndigo;
+        }
+
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(16),
@@ -230,20 +293,20 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: (pocket['color'] as Color).withValues(alpha: 0.15),
+                  color: color.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(pocket['icon'] as IconData, color: pocket['color'] as Color, size: 22),
+                child: Icon(icon, color: color, size: 22),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Text(
-                  pocket['name'] as String,
+                  name,
                   style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
               Text(
-                "\$${(pocket['balance'] as double).toStringAsFixed(2)}",
+                "\$${balance.toStringAsFixed(2)}",
                 style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
               )
             ],
@@ -257,7 +320,10 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen> {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
-        onPressed: widget.onLogSpendPressed,
+        onPressed: () async {
+          widget.onLogSpendPressed();
+          await _loadOfflineData();
+        },
         icon: const Icon(Icons.add, color: Colors.black),
         label: const Text(
           "Log Spend (Instant 2-Tap)",
