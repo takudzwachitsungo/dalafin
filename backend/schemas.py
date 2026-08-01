@@ -39,9 +39,13 @@ class TokenData(BaseModel):
 
 # Transaction schemas
 class TransactionBase(BaseModel):
+    account_id: Optional[UUID] = None
     amount: Decimal = Field(gt=0)
+    fee_amount: Optional[Decimal] = Decimal("0.00")
+    total_deducted: Optional[Decimal] = None
     category: str
     is_impulse: bool = False
+    is_pacing_flag: bool = False
     note: Optional[str] = None
     emergency_reason: Optional[str] = None
 
@@ -50,6 +54,8 @@ class TransactionCreate(TransactionBase):
 
 class TransactionUpdate(BaseModel):
     amount: Optional[Decimal] = Field(None, gt=0)
+    fee_amount: Optional[Decimal] = None
+    total_deducted: Optional[Decimal] = None
     category: Optional[str] = None
     is_impulse: Optional[bool] = None
     note: Optional[str] = None

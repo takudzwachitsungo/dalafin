@@ -10,12 +10,17 @@ class Transaction(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    amount = Column(Numeric(10, 2), nullable=False)
+    account_id = Column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True, index=True)
+    amount = Column(Numeric(10, 2), nullable=False) # Base purchase price
+    fee_amount = Column(Numeric(10, 2), default=0.00) # EcoCash/Bank fee & tax
+    total_deducted = Column(Numeric(10, 2), nullable=False) # Base + Fee
     category = Column(String, nullable=False, index=True)
     date = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
     is_impulse = Column(Boolean, default=False, index=True)
+    is_pacing_flag = Column(Boolean, default=False) # Flagged if spend velocity exceeded expected pace
     note = Column(Text)
     emergency_reason = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     user = relationship("User", backref="transactions")
+    account = relationship("Account", backref="transactions")

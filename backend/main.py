@@ -3,8 +3,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from config import settings
 from database import Base, engine
+
+# Ensure all SQLAlchemy models are registered
+import models.user
+import models.account
+import models.transaction
+import models.recurring
+import models.reflection
+import models.goal
+import models.category_limit
+import models.wishlist
+import models.streak
+import models.rollover
+
 from routes import (
     auth, 
+    accounts,
     transactions, 
     reflections, 
     goals, 
@@ -30,9 +44,9 @@ async def lifespan(app: FastAPI):
     shutdown_scheduler()
 
 app = FastAPI(
-    title="Finance App API",
-    description="Behavior-driven personal finance application API",
-    version="1.0.0",
+    title="Dalafin Finance API",
+    description="Behavior-driven personal finance application API with Tariff Engine",
+    version="1.1.0",
     lifespan=lifespan
 )
 
@@ -47,6 +61,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth.router)
+app.include_router(accounts.router)
 app.include_router(transactions.router)
 app.include_router(reflections.router)
 app.include_router(goals.router)
@@ -60,9 +75,9 @@ app.include_router(insights.router)
 @app.get("/")
 def read_root():
     return {
-        "message": "Finance App API",
-        "version": "1.0.0",
-        "status": "online"
+        "message": "Dalafin API Online",
+        "version": "1.1.0",
+        "status": "healthy"
     }
 
 @app.get("/health")

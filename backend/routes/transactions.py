@@ -5,10 +5,12 @@ from typing import List
 from datetime import datetime, date, timedelta
 from database import get_db
 from models.user import User
+from models.account import Account
 from models.transaction import Transaction
 from models.category_limit import CategoryLimit
 from schemas import TransactionCreate, TransactionUpdate, TransactionResponse
 from utils.deps import get_current_user
+from services.fee_engine import fee_engine
 
 router = APIRouter(prefix="/api/transactions", tags=["Transactions"])
 
@@ -44,11 +46,39 @@ def create_transaction(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new transaction"""
+    """Create a new transaction with automatic tariff fee calculation and account balance debit"""
+    account = None
+    fee = float(transaction_data.fee_amount or 0)
+    total_deducted = float(transaction_data.amount) + fee
+    
+    if transaction_data.account_id:
+        account = db.query(Account).filter(
+            Account.id == transaction_data.account_id,
+            Account.user_id == current_user.id
+        ).first()
+        
+        if account:
+            # Auto-calculate fee if not explicitly provided
+            if transaction_data.fee_amount is None or transaction_data.fee_amount == 0:
+                fee, total_deducted = fee_engine.calculate_fee(
+                    float(transaction_data.amount),
+                    account.fee_tariff_type
+                )
+            # Debit account balance
+            account.current_balance = float(account.current_balance or 0) - total_deducted
+
     # Create transaction
     transaction = Transaction(
         user_id=current_user.id,
-        **transaction_data.dict()
+        account_id=transaction_data.account_id,
+        amount=transaction_data.amount,
+        fee_amount=fee,
+        total_deducted=total_deducted,
+        category=transaction_data.category,
+        is_impulse=transaction_data.is_impulse,
+        is_pacing_flag=transaction_data.is_pacing_flag,
+        note=transaction_data.note,
+        emergency_reason=transaction_data.emergency_reason
     )
     db.add(transaction)
     
@@ -83,7 +113,7 @@ def get_transaction_stats(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get transaction statistics"""
+    """Get transaction statistics including fees"""
     today = date.today()
     week_ago = today - timedelta(days=7)
     month_ago = today - timedelta(days=30)
@@ -106,6 +136,12 @@ def get_transaction_stats(
         Transaction.date >= month_ago
     ).scalar() or 0
     
+    # Month fees paid
+    month_fees = db.query(func.sum(Transaction.fee_amount)).filter(
+        Transaction.user_id == current_user.id,
+        Transaction.date >= month_ago
+    ).scalar() or 0
+    
     # Impulse purchases count
     impulse_count = db.query(func.count(Transaction.id)).filter(
         Transaction.user_id == current_user.id,
@@ -116,6 +152,7 @@ def get_transaction_stats(
         "today_spent": float(today_spent),
         "week_spent": float(week_spent),
         "month_spent": float(month_spent),
+        "month_fees_paid": float(month_fees),
         "impulse_count": impulse_count
     }
 
@@ -139,39 +176,13 @@ def get_transaction(
     
     return transaction
 
-@router.put("/{transaction_id}", response_model=TransactionResponse)
-def update_transaction(
-    transaction_id: str,
-    transaction_data: TransactionUpdate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Update a transaction"""
-    transaction = db.query(Transaction).filter(
-        Transaction.id == transaction_id,
-        Transaction.user_id == current_user.id
-    ).first()
-    
-    if not transaction:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Transaction not found"
-        )
-    
-    for key, value in transaction_data.dict(exclude_unset=True).items():
-        setattr(transaction, key, value)
-    
-    db.commit()
-    db.refresh(transaction)
-    return transaction
-
 @router.delete("/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_transaction(
     transaction_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Delete a transaction"""
+    """Delete a transaction and restore account balance"""
     transaction = db.query(Transaction).filter(
         Transaction.id == transaction_id,
         Transaction.user_id == current_user.id
@@ -183,6 +194,12 @@ def delete_transaction(
             detail="Transaction not found"
         )
     
+    # Restore account balance if associated with an account
+    if transaction.account_id:
+        account = db.query(Account).filter(Account.id == transaction.account_id).first()
+        if account:
+            account.current_balance = float(account.current_balance or 0) + float(transaction.total_deducted or transaction.amount)
+            
     # Adjust category limit spent
     category_limit = db.query(CategoryLimit).filter(
         CategoryLimit.user_id == current_user.id,
